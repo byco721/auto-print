@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Browser Print
+Name[vi]=In chứng từ từ trình duyệt
+Comment=Xem trình duyệt, in chứng từ và thao tác tự động
+Exec=browser-print gui
+Icon=browser-print
+Terminal=false
+Categories=Office;Utility;
+Keywords=print;browser;invoice;in;chứng từ;hóa đơn;
+StartupNotify=true

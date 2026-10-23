@@ -1,0 +1,5 @@
+#!/bin/sh
+# Trình khởi chạy Browser Print
+APP_DIR="${BROWSER_PRINT_DIR:-/opt/browser-print}"
+export PYTHONPATH="$APP_DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m browserprint "$@"

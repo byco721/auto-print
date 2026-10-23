@@ -1,0 +1,11 @@
+[Unit]
+Description=Browser Print - tự động in chứng từ từ trình duyệt
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/browser-print watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
