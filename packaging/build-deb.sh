@@ -25,7 +25,7 @@ Section: utils
 Priority: optional
 Architecture: all
 Depends: python3 (>= 3.8), python3-tk, python3-websocket, cups-client, xdg-utils
-Recommends: cups, chromium | google-chrome-stable | microsoft-edge-stable | brave-browser
+Recommends: cups, fonts-symbola, chromium | google-chrome-stable | microsoft-edge-stable | brave-browser
 Maintainer: Browser Print <noreply@localhost>
 Description: Xem trình duyệt, in chứng từ và thao tác tự động
  Kết nối Chrome/Chromium/Edge/Brave qua DevTools Protocol để in trang

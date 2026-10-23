@@ -4,6 +4,7 @@ import json
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -1187,7 +1188,45 @@ class RuleDialog(tk.Toplevel):
         self.destroy()
 
 
+# Tk 8.6 trên X11 sập với "X Error BadLength (RenderAddGlyphs)" khi vẽ emoji bằng font màu
+# (Noto Color Emoji). Cho fontconfig bỏ qua font màu để emoji dùng font đơn sắc (Symbola...).
+FONTCONFIG_NO_COLOR = """<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <include ignore_missing="yes">%s</include>
+  <selectfont>
+    <rejectfont>
+      <glob>*Color*Emoji*</glob>
+      <glob>*color*emoji*</glob>
+      <pattern><patelt name="color"><bool>true</bool></patelt></pattern>
+    </rejectfont>
+  </selectfont>
+</fontconfig>
+"""
+
+
+def _avoid_color_emoji_crash():
+    if not sys.platform.startswith("linux") or os.environ.get("BROWSER_PRINT_KEEP_FONTCONFIG"):
+        return
+    if tk.TkVersion >= 8.7:      # Tk 8.7/9 vẽ được emoji màu
+        return
+    base = os.environ.get("FONTCONFIG_FILE") or "/etc/fonts/fonts.conf"
+    if not os.path.isfile(base):   # không có cấu hình gốc thì để nguyên, tránh mất hết font
+        return
+    path = os.path.join(config.DATA_DIR, "fonts-no-color-emoji.conf")
+    if os.path.abspath(base) == os.path.abspath(path):
+        return
+    try:
+        os.makedirs(config.DATA_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(FONTCONFIG_NO_COLOR % base)
+    except OSError:
+        return
+    os.environ["FONTCONFIG_FILE"] = path    # phải đặt trước khi Tk khởi tạo font
+
+
 def main():
+    _avoid_color_emoji_crash()
     root = tk.Tk()
     App(root)
     root.mainloop()

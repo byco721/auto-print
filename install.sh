@@ -14,8 +14,11 @@ echo "==> Cài các gói phụ thuộc (python3, tkinter, websocket-client, CUPS
 if command -v apt-get >/dev/null 2>&1; then
     apt-get update
     apt-get install -y python3 python3-tk python3-websocket cups cups-client xdg-utils
+    # font emoji đơn sắc: Tk 8.6 không vẽ được emoji màu (lỗi X BadLength RenderAddGlyphs)
+    apt-get install -y fonts-symbola || true
 elif command -v dnf >/dev/null 2>&1; then
     dnf install -y python3 python3-tkinter python3-websocket-client cups cups-client xdg-utils
+    dnf install -y gdouros-symbola-fonts || true
 elif command -v zypper >/dev/null 2>&1; then
     zypper --non-interactive install python3 python3-tk python3-websocket-client cups cups-client xdg-utils
 elif command -v pacman >/dev/null 2>&1; then

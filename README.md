@@ -174,6 +174,18 @@ browser-print capture -f "misa" -P HP_LaserJet -n 2   # chỉ bắt & in PDF má
 
 Muốn dịch vụ chạy nền `browser-print-watch` cũng bắt PDF: tích "Tự bật khi mở ứng dụng" ở thẻ PDF máy chủ (lưu `capture.enabled=true` trong cấu hình).
 
+## Xử lý sự cố
+
+**App tắt ngay khi mở, báo `X Error of failed request: BadLength … RenderAddGlyphs`.** Lỗi này do Tk 8.6 trên Linux không vẽ được emoji bằng font màu (Noto Color Emoji).
+- Từ bản này, app tự cho thư viện font bỏ qua font emoji màu, nên không còn bị.
+- Để các biểu tượng hiện đẹp, nên cài thêm font emoji đơn sắc:
+
+```bash
+sudo apt install fonts-symbola
+```
+
+Nếu muốn tắt cơ chế này (ví dụ đã có Tk 8.7 trở lên), đặt biến môi trường `BROWSER_PRINT_KEEP_FONTCONFIG=1`.
+
 ## Tệp tin
 
 - Cấu hình & quy tắc: `~/.config/browser-print/config.json`
