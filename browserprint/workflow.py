@@ -515,8 +515,7 @@ class WorkflowRunner:
                 self.ledger.update(key, printed=True, job=job, tagged=False,
                                    time=time.strftime("%Y-%m-%d %H:%M:%S"), label=r["label"])
                 if wf["wait_job"] and job:
-                    self.log("   ⏳ Chờ máy in in xong %s..." % job)
-                    if not printing.wait_job(job, float(wf["job_timeout"]), stop_event=self.stop):
+                    if not self._wait_printer(job):
                         return self._result(r, False, "⚠ đã gửi lệnh in %s nhưng máy in chưa in xong "
                                                       "(hết giấy/kẹt/tắt máy?) — chưa gắn thẻ" % job)
             else:
@@ -531,6 +530,21 @@ class WorkflowRunner:
                                           "✔ đã gắn thẻ '%s' (đã in trước đó, không in lại)") % wf["tag"])
         except (CDPError, printing.PrintError, OSError) as e:
             return self._result(r, False, "✖ %s" % e)
+
+    def _wait_printer(self, job):
+        """Chờ lệnh in rời hàng đợi CUPS, báo tiến độ mỗi 15 giây để không tưởng app bị treo."""
+        timeout = float(self.wf["job_timeout"])
+        self.log("   ⏳ Chờ máy in in xong lệnh %s (tối đa %gs) rồi mới gắn thẻ..." % (job, timeout))
+        start = time.time()
+        while True:
+            left = timeout - (time.time() - start)
+            if printing.wait_job(job, min(15, max(left, 0)), stop_event=self.stop):
+                self.log("   ✔ Máy in đã in xong sau %ds" % (time.time() - start))
+                return True
+            if time.time() - start >= timeout or self.stop.is_set():
+                return False
+            self.log("   ⏳ lệnh %s vẫn trong hàng đợi máy in... %ds (máy in bật chưa, còn giấy không?)"
+                     % (job, time.time() - start))
 
     def _result(self, r, ok, msg):
         self.log("   " + msg)
@@ -548,15 +562,35 @@ class WorkflowRunner:
         open_steps, after_steps = steps[:cut], steps[cut + 1:]
         macro.run(tab, open_steps, self.cfg, self._vars(r), self._steplog, self.stop, row_scope=ROW_MARK,
                   refind_row=lambda: self._find(tab, r["key"]))
+        try:
+            return self._take_pdf_and_print(r, before)
+        finally:
+            # luôn dọn dẹp (đóng hộp xem trước...) kể cả khi không nhận được PDF, để lần sau không bị che
+            if after_steps:
+                try:
+                    macro.run(tab, after_steps, self.cfg, self._vars(r), self._steplog, self.stop,
+                              row_scope=ROW_MARK, refind_row=lambda: self._find(tab, r["key"]))
+                except CDPError as e:
+                    self.log("   ⚠ bước sau khi in: %s" % e)
+            self._close_new_tabs(tab, before)
+
+    def _take_pdf_and_print(self, r, before):
+        wf = self.wf
+        timeout = float(wf["pdf_timeout"])
+        self.log("   ⏳ Đang chờ máy chủ gửi PDF (tối đa %gs)..." % timeout)
         info = new_tab = None
         new_since = None
-        deadline = time.time() + float(wf["pdf_timeout"])
-        while time.time() < deadline and not self.stop.is_set():
+        start = time.time()
+        next_note = start + 10
+        while time.time() - start < timeout and not self.stop.is_set():
             try:
                 info = self.expect.q.get(timeout=0.5)
                 break
             except queue.Empty:
                 pass
+            if time.time() >= next_note:
+                self.log("   ⏳ vẫn đang chờ PDF... %ds" % (time.time() - start))
+                next_note += 10
             new = [t for t in self.browser.tabs() if t["id"] not in before]
             if new:
                 new_since = new_since or time.time()
@@ -568,8 +602,9 @@ class WorkflowRunner:
         printer = wf["printer"] or self.cfg.get("printer")
         copies = int(wf["copies"] or self.cfg.get("copies", 1))
         if info:
+            self.log("   📥 Đã nhận PDF '%s' (%d KB) sau %ds" % (info["name"], info["size"] // 1024, time.time() - start))
             job = capture.print_original(info["path"], self.cfg, title=info["name"], printer=printer, copies=copies)
-            self.log("   🖨 In PDF gốc '%s' → %s" % (info["name"], job))
+            self.log("   🖨 Đã gửi PDF gốc tới máy in %s → lệnh %s" % (printer or "(mặc định)", job))
         elif new_tab:
             with self.browser.connect(new_tab) as t2:
                 t2.wait_for_load(30)
@@ -578,15 +613,15 @@ class WorkflowRunner:
                                      margin_mm=self.cfg.get("margin_mm", 10), keep_pdf=True,
                                      fit_to_page=self.cfg.get("fit_to_page", True), log=self._steplog)
             self.log("   🖨 In trang '%s' → %s" % (new_tab.get("title", ""), job))
+        elif self.stop.is_set():
+            raise CDPError("đã dừng theo yêu cầu")
         else:
-            raise CDPError("đã bấm In nhưng không thấy PDF hay trang in nào sau %ss" % wf["pdf_timeout"])
-        if after_steps:
-            try:
-                macro.run(tab, after_steps, self.cfg, self._vars(r), self._steplog, self.stop, row_scope=ROW_MARK,
-                  refind_row=lambda: self._find(tab, r["key"]))
-            except CDPError as e:   # đã in rồi: lỗi dọn dẹp chỉ cảnh báo, bước gắn thẻ sẽ tự báo nếu bị che
-                self.log("   ⚠ bước sau khi in: %s" % e)
-        if wf["close_new_tabs"]:
+            raise CDPError("hộp in đã mở nhưng app không bắt được file PDF sau %gs — gửi Nhật ký để kiểm tra"
+                           % timeout)
+        return job
+
+    def _close_new_tabs(self, tab, before):
+        if self.wf["close_new_tabs"]:
             for t in self.browser.tabs():
                 if t["id"] not in before:
                     try:
@@ -597,7 +632,6 @@ class WorkflowRunner:
                 self.browser.activate(tab.info.get("id", ""))
             except CDPError:
                 pass
-        return job
 
     def _tag_row(self, tab, r):
         wf = self.wf
