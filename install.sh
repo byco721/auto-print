@@ -33,11 +33,16 @@ if ! python3 -c "import websocket" 2>/dev/null; then
         || python3 -m pip install websocket-client
 fi
 
-echo "==> Chép chương trình vào $PREFIX_DIR"
-rm -rf "$PREFIX_DIR"
-mkdir -p "$PREFIX_DIR"
-cp -r "$SRC_DIR/browserprint" "$PREFIX_DIR/"
-find "$PREFIX_DIR" -name "__pycache__" -type d -prune -exec rm -rf {} +
+if [ "$(cd "$PREFIX_DIR" 2>/dev/null && pwd -P)" = "$(cd "$SRC_DIR" && pwd -P)" ]; then
+    # Mã nguồn đã nằm sẵn ở $PREFIX_DIR (clone thẳng vào đây): KHÔNG xóa/chép, cập nhật bằng git pull
+    echo "==> Mã nguồn đã ở $PREFIX_DIR, giữ nguyên (lần sau chỉ cần: cd $PREFIX_DIR && sudo git pull)"
+else
+    echo "==> Chép chương trình vào $PREFIX_DIR"
+    rm -rf "$PREFIX_DIR/browserprint"
+    mkdir -p "$PREFIX_DIR"
+    cp -r "$SRC_DIR/browserprint" "$PREFIX_DIR/"
+fi
+find "$PREFIX_DIR/browserprint" -name "__pycache__" -type d -prune -exec rm -rf {} +
 install -m 755 "$SRC_DIR/packaging/browser-print" /usr/bin/browser-print
 install -m 644 "$SRC_DIR/packaging/browser-print.desktop" /usr/share/applications/browser-print.desktop
 install -D -m 644 "$SRC_DIR/packaging/browser-print.svg" /usr/share/icons/hicolor/scalable/apps/browser-print.svg
